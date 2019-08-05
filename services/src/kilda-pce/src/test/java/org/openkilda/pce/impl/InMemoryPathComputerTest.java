@@ -20,140 +20,31 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThat;
 
-import org.openkilda.config.provider.ConfigurationProvider;
-import org.openkilda.config.provider.PropertiesBasedConfigurationProvider;
 import org.openkilda.model.Flow;
 import org.openkilda.model.FlowEncapsulationType;
 import org.openkilda.model.FlowPath;
-import org.openkilda.model.Isl;
 import org.openkilda.model.IslStatus;
 import org.openkilda.model.PathId;
-import org.openkilda.model.PathSegment;
 import org.openkilda.model.Switch;
-import org.openkilda.model.SwitchFeatures;
 import org.openkilda.model.SwitchId;
-import org.openkilda.model.SwitchStatus;
-import org.openkilda.pce.AvailableNetworkFactory;
+import org.openkilda.pce.NetworkBaseTest;
 import org.openkilda.pce.Path;
 import org.openkilda.pce.PathComputer;
-import org.openkilda.pce.PathComputerConfig;
-import org.openkilda.pce.PathComputerFactory;
 import org.openkilda.pce.PathComputerFactory.WeightStrategy;
 import org.openkilda.pce.PathPair;
 import org.openkilda.pce.exception.RecoverableException;
 import org.openkilda.pce.exception.UnroutableFlowException;
 import org.openkilda.pce.finder.BestCostAndShortestPathFinder;
-import org.openkilda.persistence.Neo4jConfig;
-import org.openkilda.persistence.PersistenceManager;
-import org.openkilda.persistence.TransactionManager;
-import org.openkilda.persistence.repositories.FlowPathRepository;
-import org.openkilda.persistence.repositories.FlowRepository;
-import org.openkilda.persistence.repositories.IslRepository;
-import org.openkilda.persistence.repositories.RepositoryFactory;
-import org.openkilda.persistence.repositories.SwitchFeaturesRepository;
-import org.openkilda.persistence.repositories.SwitchRepository;
-import org.openkilda.persistence.repositories.impl.Neo4jSessionFactory;
-import org.openkilda.persistence.spi.PersistenceProvider;
 
 import org.hamcrest.Matchers;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
 import org.junit.Ignore;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
-import org.neo4j.ogm.testutil.TestServer;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-public class InMemoryPathComputerTest {
-
-    static TestServer testServer;
-    static TransactionManager txManager;
-    static SwitchRepository switchRepository;
-    static SwitchFeaturesRepository switchFeaturesRepository;
-    static IslRepository islRepository;
-    static FlowRepository flowRepository;
-    static FlowPathRepository flowPathRepository;
-
-    static PathComputerConfig config;
-
-    static AvailableNetworkFactory availableNetworkFactory;
-    static PathComputerFactory pathComputerFactory;
-
-    @Rule
-    public ExpectedException thrown = ExpectedException.none();
-
-    @BeforeClass
-    public static void setUpOnce() {
-        testServer = new TestServer(true, true, 5);
-
-        PersistenceManager persistenceManager = PersistenceProvider.getInstance().createPersistenceManager(
-                new ConfigurationProvider() { //NOSONAR
-                    @SuppressWarnings("unchecked")
-                    @Override
-                    public <T> T getConfiguration(Class<T> configurationType) {
-                        if (configurationType.equals(Neo4jConfig.class)) {
-                            return (T) new Neo4jConfig() {
-                                @Override
-                                public String getUri() {
-                                    return testServer.getUri();
-                                }
-
-                                @Override
-                                public String getLogin() {
-                                    return testServer.getUsername();
-                                }
-
-                                @Override
-                                public String getPassword() {
-                                    return testServer.getPassword();
-                                }
-
-                                @Override
-                                public int getConnectionPoolSize() {
-                                    return 50;
-                                }
-
-                                @Override
-                                public String getIndexesAuto() {
-                                    return "update";
-                                }
-                            };
-                        } else {
-                            throw new UnsupportedOperationException("Unsupported configurationType "
-                                    + configurationType);
-                        }
-                    }
-                });
-
-        txManager = persistenceManager.getTransactionManager();
-
-        RepositoryFactory repositoryFactory = persistenceManager.getRepositoryFactory();
-        switchRepository = repositoryFactory.createSwitchRepository();
-        switchFeaturesRepository = repositoryFactory.createSwitchFeaturesRepository();
-        islRepository = repositoryFactory.createIslRepository();
-        flowRepository = repositoryFactory.createFlowRepository();
-        flowPathRepository = repositoryFactory.createFlowPathRepository();
-
-        config = new PropertiesBasedConfigurationProvider().getConfiguration(PathComputerConfig.class);
-
-        availableNetworkFactory = new AvailableNetworkFactory(config, repositoryFactory);
-        pathComputerFactory = new PathComputerFactory(config, availableNetworkFactory);
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        testServer.shutdown();
-    }
-
-    @After
-    public void cleanUp() {
-        ((Neo4jSessionFactory) txManager).getSession().purgeDatabase();
-    }
+public class InMemoryPathComputerTest extends NetworkBaseTest {
 
     @Test
     public void shouldFindPathOverDiamondWithAllActiveLinksByCost()
@@ -234,7 +125,7 @@ public class InMemoryPathComputerTest {
         /*
          * simple happy path test .. but pathB has no cost .. but still cheaper than pathC (test the default)
          */
-        createDiamond(IslStatus.ACTIVE, IslStatus.ACTIVE, -1, 2000, "03:", 1);
+        createDiamond(IslStatus.ACTIVE, IslStatus.ACTIVE, 0, 2000, "03:", 1);
 
         Switch srcSwitch = switchRepository.findById(new SwitchId("03:01")).get();
         Switch destSwitch = switchRepository.findById(new SwitchId("03:04")).get();
@@ -743,48 +634,5 @@ public class InMemoryPathComputerTest {
         createIsl(nodeC, nodeA, IslStatus.ACTIVE, IslStatus.ACTIVE, pathCcost, 1000, 6);
         createIsl(nodeC, nodeB, IslStatus.ACTIVE, IslStatus.ACTIVE, pathCcost, 1000, 7);
         createIsl(nodeB, nodeC, IslStatus.ACTIVE, IslStatus.ACTIVE, pathCcost, 1000, 7);
-    }
-
-    private Switch createSwitch(String name) {
-        Switch sw = Switch.builder().switchId(new SwitchId(name)).status(SwitchStatus.ACTIVE)
-                .build();
-
-        switchRepository.createOrUpdate(sw);
-        SwitchFeatures switchFeatures = SwitchFeatures.builder().switchObj(sw)
-                .supportedTransitEncapsulation(SwitchFeatures.DEFAULT_FLOW_ENCAPSULATION_TYPES).build();
-        switchFeaturesRepository.createOrUpdate(switchFeatures);
-        return sw;
-    }
-
-    private Isl createIsl(Switch srcSwitch, Switch dstSwitch, IslStatus status, IslStatus actual,
-                          int cost, long bw, int port) {
-        Isl isl = new Isl();
-        isl.setSrcSwitch(srcSwitch);
-        isl.setDestSwitch(dstSwitch);
-        isl.setStatus(status);
-        isl.setActualStatus(actual);
-        if (cost >= 0) {
-            isl.setCost(cost);
-        }
-        isl.setAvailableBandwidth(bw);
-        isl.setLatency(5);
-        isl.setSrcPort(port);
-        isl.setDestPort(port);
-
-        islRepository.createOrUpdate(isl);
-        return isl;
-    }
-
-    private FlowPath addPathSegment(FlowPath flowPath, Switch src, Switch dst, int srcPort, int dstPort) {
-        PathSegment ps = new PathSegment();
-        ps.setSrcSwitch(src);
-        ps.setDestSwitch(dst);
-        ps.setSrcPort(srcPort);
-        ps.setDestPort(dstPort);
-        ps.setLatency(null);
-        List<PathSegment> segments = new ArrayList<>(flowPath.getSegments());
-        segments.add(ps);
-        flowPath.setSegments(segments);
-        return flowPath;
     }
 }

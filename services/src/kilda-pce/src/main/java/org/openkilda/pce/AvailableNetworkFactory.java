@@ -15,6 +15,8 @@
 
 package org.openkilda.pce;
 
+import static java.lang.String.format;
+
 import org.openkilda.model.Flow;
 import org.openkilda.model.Isl;
 import org.openkilda.model.PathId;
@@ -27,6 +29,7 @@ import org.openkilda.persistence.repositories.RepositoryFactory;
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -105,14 +108,36 @@ public class AvailableNetworkFactory {
 
     private Collection<Isl> getAvailableIsls(BuildStrategy buildStrategy, Flow flow) {
         if (buildStrategy == BuildStrategy.COST) {
-            return flow.isIgnoreBandwidth() ? islRepository.findAllActive() :
+            Collection<Isl> isls = flow.isIgnoreBandwidth() ? islRepository.findAllActive() :
                     islRepository.findActiveWithAvailableBandwidth(flow.getBandwidth(), flow.getEncapsulationType());
+            validateIslsCost(isls);
+            return isls;
+
         } else if (buildStrategy == BuildStrategy.SYMMETRIC_COST) {
-            return flow.isIgnoreBandwidth() ? islRepository.findAllActive() :
+            Collection<Isl> isls = flow.isIgnoreBandwidth() ? islRepository.findAllActive() :
                     islRepository.findSymmetricActiveWithAvailableBandwidth(flow.getBandwidth(),
                             flow.getEncapsulationType());
+            validateIslsCost(isls);
+            return isls;
         } else {
-            throw new UnsupportedOperationException(String.format("Unsupported buildStrategy type %s", buildStrategy));
+            throw new UnsupportedOperationException(format("Unsupported buildStrategy type %s", buildStrategy));
+        }
+    }
+
+    private void validateIslsCost(Collection<Isl> isls) {
+        List<Isl> islsWithNegativeCost = isls.stream()
+                .filter(isl -> isl.getCost() < 0)
+                .collect(Collectors.toList());
+
+        if (!islsWithNegativeCost.isEmpty()) {
+            List<String> islMessages = new ArrayList<>();
+            for (Isl isl : islsWithNegativeCost) {
+                islMessages.add(format("(%s_%d ===> %s_%d cost: %d)",
+                        isl.getSrcSwitch().getSwitchId(), isl.getSrcPort(), isl.getDestSwitch().getSwitchId(),
+                        isl.getDestPort(), isl.getCost()));
+            }
+
+            log.error("Invalid network state. Following ISLs have negative costs: {}", String.join(", ", islMessages));
         }
     }
 
@@ -131,7 +156,7 @@ public class AvailableNetworkFactory {
             try {
                 return valueOf(strategy.toUpperCase());
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException(String.format("BuildStrategy %s is not supported", strategy));
+                throw new IllegalArgumentException(format("BuildStrategy %s is not supported", strategy));
             }
         }
     }
