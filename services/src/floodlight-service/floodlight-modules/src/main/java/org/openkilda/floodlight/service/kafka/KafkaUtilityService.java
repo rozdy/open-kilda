@@ -24,8 +24,11 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.common.TopicPartition;
 
+import java.util.Collection;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 public class KafkaUtilityService implements IService {
     private final KafkaChannel owner;
@@ -41,6 +44,21 @@ public class KafkaUtilityService implements IService {
         Properties config = setup.applyConfig(owner.getConfig().consumerProperties());
         KafkaConsumer<String, String> consumer = new KafkaConsumer<>(config);
         setup.applyInstance(consumer);
+
+        boolean consumesDiscoTopic = setup.getTopics()
+                .stream()
+                .anyMatch(owner.getSpeakerDiscoTopic()::equals);
+        if (consumesDiscoTopic) {
+            Collection<TopicPartition> partitions = consumer.partitionsFor(owner.getSpeakerDiscoTopic())
+                    .stream()
+                    .map(partitionInfo -> new TopicPartition(partitionInfo.topic(), partitionInfo.partition()))
+                    .collect(Collectors.toList());
+
+            // Initial poll to get the consumer registration process going.
+            consumer.poll(0L);
+            consumer.seekToEnd(partitions);
+        }
+
         return consumer;
     }
 

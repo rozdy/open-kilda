@@ -47,7 +47,7 @@ public class KafkaConsumerSetup {
      * List of kafka-topics consumer will be subscribed to.
      */
     public List<String> getTopics() {
-        ArrayList<String> topics = new ArrayList<>(topicsSet.size());
+        ArrayList<String> topics = new ArrayList<>(topicsSet);
         Collections.sort(topics);
         return topics;
     }
