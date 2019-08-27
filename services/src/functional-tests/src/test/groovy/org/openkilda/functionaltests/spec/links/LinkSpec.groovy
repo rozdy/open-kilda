@@ -214,6 +214,7 @@ class LinkSpec extends HealthCheckSpecification {
 
         and: "The switch reconnects back with a port being up"
         lockKeeper.reviveSwitch(isl.srcSwitch)
+        Wrappers.wait(WAIT_OFFSET) { northbound.getSwitch(isl.srcSwitch.dpId).state == SwitchChangeType.ACTIVATED }
 
         then: "The related ISL is discovered again"
         Wrappers.wait(WAIT_OFFSET + discoveryInterval + antiflapCooldown) {
