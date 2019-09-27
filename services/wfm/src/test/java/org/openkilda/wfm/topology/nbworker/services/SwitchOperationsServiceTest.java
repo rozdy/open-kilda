@@ -1,4 +1,4 @@
-/* Copyright 2018 Telstra Open Source
+/* Copyright 2019 Telstra Open Source
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -44,8 +44,9 @@ public class SwitchOperationsServiceTest extends Neo4jBasedTest {
         switchRepository = repositoryFactory.createSwitchRepository();
         portPropertiesRepository = repositoryFactory.createPortPropertiesRepository();
 
+        ILinkOperationsServiceCarrier carrier = new ILinkOperationsServiceCarrier() {};
         switchOperationsService = new SwitchOperationsService(persistenceManager.getRepositoryFactory(),
-                persistenceManager.getTransactionManager());
+                persistenceManager.getTransactionManager(), carrier);
     }
 
     @Test
