@@ -19,11 +19,9 @@ import static org.mockserver.integration.ClientAndServer.startClientAndServer;
 
 import org.openkilda.messaging.info.Datapoint;
 import org.openkilda.wfm.StableAbstractStormTest;
-import org.openkilda.wfm.topology.TestingKafkaBolt;
 
 import org.apache.storm.Testing;
 import org.apache.storm.generated.StormTopology;
-import org.apache.storm.kafka.bolt.KafkaBolt;
 import org.apache.storm.testing.MockedSources;
 import org.apache.storm.tuple.Values;
 import org.junit.Before;
@@ -31,7 +29,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockserver.integration.ClientAndServer;
 import org.mockserver.model.HttpRequest;
-import org.mockserver.model.HttpResponse;
 import org.mockserver.verify.VerificationTimes;
 
 import java.util.Collections;
@@ -46,11 +43,6 @@ public class OpenTsdbTopologyTest extends StableAbstractStormTest {
         StableAbstractStormTest.startCompleteTopology();
 
         mockServer = startClientAndServer(4242);
-        mockServer.when(HttpRequest
-                .request()
-                .withMethod("POST")
-                .withPath("api/put"))
-            .respond(HttpResponse.response());
     }
 
     @Before
@@ -64,7 +56,7 @@ public class OpenTsdbTopologyTest extends StableAbstractStormTest {
 
         MockedSources sources = new MockedSources();
         Testing.withTrackedCluster(clusterParam, (cluster) ->  {
-            OpenTsdbTopology topology = new TestingTargetTopology(new TestingKafkaBolt());
+            OpenTsdbTopology topology = new OpenTsdbTopology(makeLaunchEnvironment());
 
             sources.addMockData(OpenTsdbTopology.OTSDB_SPOUT_ID,
                     new Values(null, datapoint));
@@ -86,7 +78,7 @@ public class OpenTsdbTopologyTest extends StableAbstractStormTest {
         MockedSources sources = new MockedSources();
 
         Testing.withTrackedCluster(clusterParam, (cluster) ->  {
-            OpenTsdbTopology topology = new TestingTargetTopology(new TestingKafkaBolt());
+            OpenTsdbTopology topology = new OpenTsdbTopology(makeLaunchEnvironment());
 
             sources.addMockData(OpenTsdbTopology.OTSDB_SPOUT_ID,
                     new Values(null, datapoint), new Values(null, datapoint));
@@ -108,7 +100,7 @@ public class OpenTsdbTopologyTest extends StableAbstractStormTest {
         MockedSources sources = new MockedSources();
 
         Testing.withTrackedCluster(clusterParam, (cluster) ->  {
-            OpenTsdbTopology topology = new TestingTargetTopology(new TestingKafkaBolt());
+            OpenTsdbTopology topology = new OpenTsdbTopology(makeLaunchEnvironment());
 
             sources.addMockData(OpenTsdbTopology.OTSDB_SPOUT_ID,
                     new Values(null, datapoint1), new Values(null, datapoint2));
@@ -121,27 +113,4 @@ public class OpenTsdbTopologyTest extends StableAbstractStormTest {
         //verify that request is sent to OpenTSDB server once
         mockServer.verify(HttpRequest.request(), VerificationTimes.exactly(2));
     }
-
-    private class TestingTargetTopology extends OpenTsdbTopology {
-
-        private KafkaBolt kafkaBolt;
-
-        TestingTargetTopology(KafkaBolt kafkaBolt) throws Exception {
-            super(makeLaunchEnvironment());
-
-            this.kafkaBolt = kafkaBolt;
-        }
-
-        @Override
-        public String getDefaultTopologyName() {
-            return OpenTsdbTopology.class.getSimpleName().toLowerCase();
-        }
-
-        @Override
-        protected KafkaBolt createKafkaBolt(String topic) {
-            return kafkaBolt;
-        }
-
-    }
-
 }
